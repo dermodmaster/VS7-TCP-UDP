@@ -22,7 +22,12 @@ except Exception as e:
 def showMenu():
     global FILENAME, CHUNKSIZE
     while FILENAME is None:
-        FILENAME = input("Bitte gebe den Namen der zu holenden Datei an:")
+        try:
+            FILENAME = input("Bitte gebe den Namen der zu holenden Datei an:")
+            if FILENAME.find(";") != -1:
+                raise ValueError("Dateiname darf kein Semikolon enthalten.")
+        except ValueError:
+            print(e)
 
     while CHUNKSIZE is None:
         try:
