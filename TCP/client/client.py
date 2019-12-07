@@ -79,7 +79,6 @@ try:
 except Exception as e:
     TRANSFER_RUNNING = False
     if str(e) == "EOF":
-        # Todo: Errorhandling und Dateiname anpassen
         with open(FILENAME,"w") as file:
             file.write(RECEIVED_DATA)
             file.close()
