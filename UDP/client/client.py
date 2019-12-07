@@ -89,6 +89,7 @@ def showMenu():
 
 
 def sendInit(chunksize, filename):
+    global BUFFER_SIZE
     print("sendInit()")
     global TRANSFER_RUNNING
     request = "INITX;"+str(CHUNKSIZE)+";"+filename
@@ -104,7 +105,7 @@ def sendInit(chunksize, filename):
 
 def getData():
     print("GET")
-    global RECEIVED_DATA
+    global RECEIVED_DATA, BUFFER_SIZE
     sendData("GET".encode("utf-8"))
     response, msgAddr = receiveData(BUFFER_SIZE)
     print("ANTWORT", response)
