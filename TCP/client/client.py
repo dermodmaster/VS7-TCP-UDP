@@ -41,12 +41,12 @@ def showMenu():
 
 def sendInit(chunksize, filename):
     print("sendInit()")
-    global TRANSFER_RUNNING
+    global TRANSFER_RUNNING, BUFFER_SIZE
     request = "INITX;"+str(CHUNKSIZE)+";"+filename
     if len(request) > BUFFER_SIZE:
         raise Exception("Dateiname ist zu lang.")
     s.send(request.encode())
-    response = s.recv(BUFFER_SIZE)
+    response = s.recv(BUFFER_SIZE+CHUNKSIZE)
     response = response.decode("utf-8")
     if response.startswith("ERROR;"):
         raise Exception("Server Error: "+response[6:]) # Fehlermeldung des Servers als Exception ausgeben.
@@ -56,7 +56,7 @@ def receiveData():
     print("GET")
     global RECEIVED_DATA
     s.send("GET".encode("utf-8"))
-    response = s.recv(BUFFER_SIZE)
+    response = s.recv(BUFFER_SIZE+CHUNKSIZE)
     print("ANTWORT", response)
     response = response.decode("utf-8")
     response = response.split(";")
