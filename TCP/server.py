@@ -8,7 +8,7 @@ BUFFER_SIZE = 1024
 TRANSFER_RUNNING = False
 REMAINING_DATA = None
 DATAPREFIX = "DATA;"
-MIN_CHUNK_SIZE = 16
+MIN_CHUNK_SIZE = 6
 
 """
 Methode die lauscht und guckt ob die antwort vollendet ist
@@ -53,7 +53,7 @@ while 1:
                     if command == "GET":
                         DATASIZE = BUFFER_SIZE - len(DATAPREFIX) # "DATA;" abziehen
                         if REMAINING_DATA == "":
-                            raise Exception("END_OF_FILE_REACHED")
+                            raise Exception("EOF")
                         dataToSend = REMAINING_DATA[:DATASIZE]
                         conn.send((DATAPREFIX+dataToSend).encode("utf-8")) # "DATA;" und Inhalt des Chunks verknüpfen und Absenden
                         REMAINING_DATA = REMAINING_DATA[DATASIZE:]

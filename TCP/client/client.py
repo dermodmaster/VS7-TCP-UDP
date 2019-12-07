@@ -4,7 +4,7 @@ SERVER_IP = "127.0.0.1"
 PORT = 8999
 
 DEFAULT_BUFFER_SIZE = 1024
-MIN_CHUNK_SIZE = 16
+MIN_CHUNK_SIZE = 6
 BUFFER_SIZE = 1024
 CHUNKSIZE = None
 FILENAME = None
@@ -32,7 +32,7 @@ def showMenu():
     while CHUNKSIZE is None:
         try:
             CHUNKSIZE = int(input("Bitte gebe die Größe eines Chunks in Bytes ein:"))
-            if CHUNKSIZE <= MIN_CHUNK_SIZE:
+            if CHUNKSIZE < MIN_CHUNK_SIZE:
                 CHUNKSIZE = None
                 raise ValueError()
         except ValueError:
@@ -63,8 +63,8 @@ def receiveData():
     if(len(response) == 2 and response[0] == "DATA"):
         RECEIVED_DATA += response[1]
     else:
-        if(response[0] == "ERROR" and response[1] == "END_OF_FILE_REACHED"):
-            raise Exception("END_OF_FILE_REACHED")
+        if(response[0] == "ERROR" and response[1] == "EOF"):
+            raise Exception("EOF")
         else:
             raise Exception("Fehlerhafte Antwort. Daten wurden erwartet.")
 
@@ -78,7 +78,7 @@ try:
 
 except Exception as e:
     TRANSFER_RUNNING = False
-    if str(e) == "END_OF_FILE_REACHED":
+    if str(e) == "EOF":
         # Todo: Errorhandling und Dateiname anpassen
         with open(FILENAME,"w") as file:
             file.write(RECEIVED_DATA)
