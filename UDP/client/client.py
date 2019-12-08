@@ -1,19 +1,26 @@
 import socket
 import struct
+from time import sleep, time
+
 
 SERVER_IP = "127.0.0.1"
 PORT = 8998
 
 DEFAULT_BUFFER_SIZE = 1024
-MIN_CHUNK_SIZE = 11
+MIN_CHUNK_SIZE = 16
 BUFFER_SIZE = 1024
 CHUNKSIZE = None
 FILENAME = None
 
+LAST_TIMEOUT_SET = None
+TIMEOUTS = []
+
+TRANSACTION_KEY = None
 TRANSFER_RUNNING = False
 RECEIVED_DATA = ""
-#TODO: TIMEOUT EINBAUEN
+
 s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+s.settimeout(5)
 try:
     s.connect((SERVER_IP, PORT))
 except Exception as e:
@@ -55,7 +62,17 @@ def sendData(input):
     s.sendto(data.encode(), (SERVER_IP,PORT))
 
 def receiveData(size):
-    data,addr = s.recvfrom(size)
+    warNachrichtFuerMich = False
+    if TRANSACTION_KEY == None:
+        data, addr = s.recvfrom(size)
+    else:
+        while not warNachrichtFuerMich:
+            data, addr = s.recvfrom(size)
+            tid = data.decode("utf-8").split(";")[1]
+            if TRANSACTION_KEY == tid:
+                warNachrichtFuerMich = True
+            else:
+                print("Nachricht war nicht für mich:",data,"Transactionkey:",TRANSACTION_KEY,"tid",tid)
 
     message = data.decode("utf-8")
     checksum = message.split(";")
@@ -89,43 +106,72 @@ def showMenu():
 
 
 def sendInit(chunksize, filename):
-    global BUFFER_SIZE
+    global BUFFER_SIZE, TRANSFER_RUNNING, TRANSACTION_KEY
     print("sendInit()")
-    global TRANSFER_RUNNING
     request = "INITX;"+str(CHUNKSIZE)+";"+filename
     if len(request) > BUFFER_SIZE:
         raise Exception("Dateiname ist zu lang.")
     sendData(request.encode())
-    BUFFER_SIZE = chunksize+5
+    #BUFFER_SIZE = chunksize+9
     response, msgAddr = receiveData(BUFFER_SIZE)
     response = response.decode("utf-8")
+    print(response)
     if response.startswith("ERROR;"):
         raise Exception("Server Error: "+response[6:]) # Fehlermeldung des Servers als Exception ausgeben.
+    response = response.split(";")
+    if response[0] == "SERVERREADY":
+        TRANSACTION_KEY = response[1]
     TRANSFER_RUNNING = True
 
 def getData():
-    print("GET")
+    print("GET;"+str(TRANSACTION_KEY))
     global RECEIVED_DATA, BUFFER_SIZE
-    sendData("GET".encode("utf-8"))
+    sendData(("GET;"+str(TRANSACTION_KEY)).encode("utf-8"))
     response, msgAddr = receiveData(BUFFER_SIZE)
     print("ANTWORT", response)
     response = response.decode("utf-8")
     response = response.split(";")
-    if(len(response) == 2 and response[0] == "DATA"):
-        RECEIVED_DATA += response[1]
+    if(len(response) == 3 and response[0] == "DATA"):
+        RECEIVED_DATA += response[2]
     else:
-        if(response[0] == "ERROR" and response[1] == "EOF"):
+        if(response[0] == "ERROR" and response[2] == "EOF"):
             raise Exception("EOF")
         else:
-            raise Exception("Fehlerhafte Antwort. Daten wurden erwartet.")
+            raise Exception("Servererror: "+response[1])
+
+
+def handleTimeout():
+    global LAST_TIMEOUT_SET, TIMEOUTS
+    # Alle timeouts zurücksetzen, falls der letzte 10 Sekunden her ist
+    if LAST_TIMEOUT_SET != None and LAST_TIMEOUT_SET + 10 > time():
+        TIMEOUTS = []
+    lastTimeoutSet = time()
+    TIMEOUTS.append(time())
+    if len(TIMEOUTS) >= 4:
+        # Keine Verbindung mehr zum Server
+        raise Exception("Verbindung zum Server unterbrochen")
+    else:
+        print("Keine Antwort. Sende Anfrage erneut.")
+
 
 try:
     while CHUNKSIZE == None or FILENAME == None:
         showMenu()
-    sendInit(CHUNKSIZE, FILENAME)
-    while True:
-        getData()
 
+    init = False
+    while not init:
+        try:
+            sendInit(CHUNKSIZE, FILENAME)
+            init = True
+        except socket.timeout as e:
+            handleTimeout()
+
+    while TRANSACTION_KEY != None:
+        sleep(1)
+        try:
+            getData()
+        except socket.timeout as e:
+            handleTimeout()
 
 except Exception as e:
     TRANSFER_RUNNING = False

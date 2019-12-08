@@ -1,6 +1,8 @@
-import socket
 import random
+import socket
 import struct
+from time import time
+
 BIND_TO_IP = "0.0.0.0"
 PORT = 8998
 
@@ -9,9 +11,11 @@ BUFFER_SIZE = 1024
 TRANSFER_RUNNING = False
 REMAINING_DATA = None
 DATAPREFIX = "DATA;"
-MIN_CHUNK_SIZE = 11
+MIN_CHUNK_SIZE = 16
+TIMEOUT = 5
+LAST_TRANSACTION_MESSAGE = None
 
-#TODO: Transaction Timeout
+
 TRANSACTION_KEY = None # KEY mit der die aktuelle Transaktion identifiziert wird
 
 # Quelle: https://github.com/houluy/UDP/blob/master/udp.py
@@ -46,6 +50,7 @@ def verify_checksum(data, checksum):
 
 def sendData(input,addr):
     data = input.decode("utf-8")+";"+str(checksum_func(input))
+    print("send data - length:"+str(len(data)),data)
     s.sendto(data.encode(),addr)
 
 def receiveData(size):
@@ -64,8 +69,35 @@ def receiveData(size):
 
 s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 s.bind((BIND_TO_IP, PORT))
+s.settimeout(TIMEOUT)
+
+
+def killTransaction():
+    global TRANSFER_RUNNING, TRANSACTION_KEY, REMAINING_DATA, BUFFER_SIZE, LAST_TRANSACTION_MESSAGE
+    print("Transaktion zurückgesetzt")
+    TRANSFER_RUNNING = False
+    TRANSACTION_KEY = None
+    REMAINING_DATA = None
+    BUFFER_SIZE = DEFAULT_BUFFER_SIZE
+    LAST_TRANSACTION_MESSAGE = None
+
+
 while 1:
-    data, msgAddr = receiveData(BUFFER_SIZE)
+    gotRequest = False
+    while not gotRequest:
+        try:
+            # Warte auf Anfrage
+            data, msgAddr = receiveData(DEFAULT_BUFFER_SIZE)
+            gotRequest = True
+        except socket.timeout as e:
+            # Keine Anfrage in den letzten 5 Sekunden gehabt
+            if TRANSFER_RUNNING:
+                # Transfer ist scheinbar getimeouted
+                killTransaction()
+
+    if LAST_TRANSACTION_MESSAGE != None and time() > LAST_TRANSACTION_MESSAGE+TIMEOUT:
+        killTransaction()
+
     print(data)
 
     if not data: break
@@ -92,21 +124,25 @@ while 1:
             else:
                 raise Exception("Es läuft kein Transfer")
         else:
+            curr_transaction_key = int(data[1])
             #Sende Dateichunk
+            if curr_transaction_key != TRANSACTION_KEY:
+                raise Exception("BUSY - TRY AGAIN LATER")
             if command == "GET":
-                DATASIZE = BUFFER_SIZE - len(DATAPREFIX)+4 # "DATA;key;" abziehen
+                LAST_TRANSACTION_MESSAGE = time()
+                DATASIZE = BUFFER_SIZE - len(DATAPREFIX)-10 # "DATA;key;" und ";xxxxx" für die Prüfsumme abziehen
                 if REMAINING_DATA == "":
                     raise Exception("EOF")
                 dataToSend = REMAINING_DATA[:DATASIZE]
-                sendData((DATAPREFIX+str(TRANSACTION_KEY)+dataToSend).encode("utf-8"), msgAddr) # "DATA;key;" und Inhalt des Chunks verknüpfen und Absenden
+                sendData((DATAPREFIX+str(TRANSACTION_KEY)+";"+dataToSend).encode("utf-8"), msgAddr) # "DATA;tid;" und Inhalt des Chunks verknüpfen und Absenden
                 REMAINING_DATA = REMAINING_DATA[DATASIZE:]
             elif command == "INITX":
                 raise Exception("BUSY")
             else:
                 raise Exception("Unerwartete Nachricht. Bitte Transfer neustarten.")
     except Exception as e:
-        TRANSFER_RUNNING = False
-        TRANSACTION_KEY = None
-        REMAINING_DATA = None
-        BUFFER_SIZE = DEFAULT_BUFFER_SIZE
-        sendData(("ERROR;"+str(e)).encode(), msgAddr)
+        if str(e) == "BUSY - TRY AGAIN LATER":
+            sendData(("ERROR;None;"+str(e)).encode(), msgAddr)
+        else:
+            sendData(("ERROR;"+str(TRANSACTION_KEY)+";"+str(e)).encode(), msgAddr)
+            killTransaction()
