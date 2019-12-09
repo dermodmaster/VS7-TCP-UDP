@@ -12,6 +12,8 @@ BUFFER_SIZE = 1024
 CHUNKSIZE = None
 FILENAME = None
 
+CHUNKPOSITION = 0
+
 LAST_TIMEOUT_SET = None
 TIMEOUTS = []
 
@@ -124,9 +126,9 @@ def sendInit(chunksize, filename):
     TRANSFER_RUNNING = True
 
 def getData():
-    print("GET;"+str(TRANSACTION_KEY))
+    print("GET;"+str(TRANSACTION_KEY)+";"+str(CHUNKPOSITION))
     global RECEIVED_DATA, BUFFER_SIZE
-    sendData(("GET;"+str(TRANSACTION_KEY)).encode("utf-8"))
+    sendData(("GET;"+str(TRANSACTION_KEY)+";"+str(CHUNKPOSITION)).encode("utf-8"))
     response, msgAddr = receiveData(BUFFER_SIZE)
     print("ANTWORT", response)
     response = response.decode("utf-8")
@@ -170,6 +172,7 @@ try:
         sleep(1)
         try:
             getData()
+            CHUNKPOSITION += 1
         except socket.timeout as e:
             handleTimeout()
 

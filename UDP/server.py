@@ -9,7 +9,7 @@ PORT = 8998
 DEFAULT_BUFFER_SIZE = 1024
 BUFFER_SIZE = 1024
 TRANSFER_RUNNING = False
-REMAINING_DATA = None
+DATA_TO_SEND = None
 DATAPREFIX = "DATA;"
 MIN_CHUNK_SIZE = 16
 TIMEOUT = 5
@@ -73,11 +73,11 @@ s.settimeout(TIMEOUT)
 
 
 def killTransaction():
-    global TRANSFER_RUNNING, TRANSACTION_KEY, REMAINING_DATA, BUFFER_SIZE, LAST_TRANSACTION_MESSAGE
+    global TRANSFER_RUNNING, TRANSACTION_KEY, DATA_TO_SEND, BUFFER_SIZE, LAST_TRANSACTION_MESSAGE
     print("Transaktion zurückgesetzt")
     TRANSFER_RUNNING = False
     TRANSACTION_KEY = None
-    REMAINING_DATA = None
+    DATA_TO_SEND = None
     BUFFER_SIZE = DEFAULT_BUFFER_SIZE
     LAST_TRANSACTION_MESSAGE = None
 
@@ -116,7 +116,7 @@ while 1:
                 BUFFER_SIZE = int(data[1])
                 filename = data[2]
                 with open(filename, "r") as file:
-                    REMAINING_DATA = file.read()
+                    DATA_TO_SEND = file.read()
                     file.close()
                 TRANSFER_RUNNING = True
                 TRANSACTION_KEY = random.randrange(100,999)
@@ -131,11 +131,11 @@ while 1:
             if command == "GET":
                 LAST_TRANSACTION_MESSAGE = time()
                 DATASIZE = BUFFER_SIZE - len(DATAPREFIX)-10 # "DATA;key;" und ";xxxxx" für die Prüfsumme abziehen
-                if REMAINING_DATA == "":
+                position = int(data[2]) # Beschreibt die Position des Datenchunks
+                dataToSend = DATA_TO_SEND[position*DATASIZE:(position+1)*DATASIZE]
+                if dataToSend == "":
                     raise Exception("EOF")
-                dataToSend = REMAINING_DATA[:DATASIZE]
                 sendData((DATAPREFIX+str(TRANSACTION_KEY)+";"+dataToSend).encode("utf-8"), msgAddr) # "DATA;tid;" und Inhalt des Chunks verknüpfen und Absenden
-                REMAINING_DATA = REMAINING_DATA[DATASIZE:]
             elif command == "INITX":
                 raise Exception("BUSY")
             else:
